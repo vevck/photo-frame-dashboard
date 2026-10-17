@@ -1,0 +1,208 @@
+/* "Glass" Today layout — full-bleed 1280 × 800, dark glass cards on a warm background.
+   Target: Android WebView 106 — no nesting, no color-mix(), no oklch(), rgba() rather than 8-digit hex.
+   Cards use translucent fills instead of backdrop-filter, which is expensive on the frame's GPU.
+
+   Structure (two independent columns, as in the design):
+     head ───────────────────────────────────────────
+     left: clock/greeting │ right: Moments carousel
+           news           │        weather | hourly | air quality
+                          │        music | football
+                          │        quote of the day
+     chores ─────────────────────────────────────────            */
+.gl {
+  position: relative; height: 100%; overflow: hidden;
+  padding: 24px 40px;
+  display: grid;
+  grid-template-columns: 408fr 778fr;
+  grid-template-rows: 48px minmax(0, 1fr) 68px;
+  grid-template-areas:
+    "head head"
+    "left right"
+    "chores chores";
+  column-gap: 14px; row-gap: 14px;
+  color: #fff; font-family: var(--sans);
+  background: #1b1714;
+}
+.gl > * { position: relative; min-width: 0; min-height: 0; }
+.gl-bg {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background:
+    radial-gradient(ellipse 30% 26% at 80% 34%, rgba(255, 178, 96, .42), rgba(255, 178, 96, 0)),
+    radial-gradient(ellipse 22% 30% at 97% 52%, rgba(255, 150, 70, .38), rgba(255, 150, 70, 0)),
+    radial-gradient(ellipse 18% 14% at 62% 30%, rgba(255, 200, 140, .22), rgba(255, 200, 140, 0)),
+    radial-gradient(ellipse 40% 45% at 18% 22%, rgba(52, 84, 86, .55), rgba(52, 84, 86, 0)),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0)),
+    linear-gradient(160deg, #1e2826 0%, #2b2520 40%, #3b2a1d 70%, #1c1411 100%);
+}
+.gl .i { flex: none; }
+
+/* ---- header */
+.gl-head { grid-area: head; display: flex; align-items: center; }
+.gl-brand { display: flex; align-items: center; gap: 12px; width: 300px; }
+.gl-brand b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+/* Hold feedback: a line fills under the logo over the hold time (App.hold sets --hold). */
+.gl-brand { position: relative; align-self: stretch; touch-action: none; -webkit-user-select: none; user-select: none; }
+.gl-brand::after {
+  content: ''; position: absolute; left: 0; bottom: 2px; width: 146px; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, .85); transform: scaleX(0); transform-origin: 0 50%; transition: transform .15s ease-out;
+}
+.gl-brand.is-holding::after { transform: scaleX(1); transition: transform var(--hold, 3s) linear; }
+.gl-nav {
+  display: flex; gap: 4px; padding: 4px; height: 48px; border-radius: 26px;
+  background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .16);
+}
+.gl-nav button { display: flex; align-items: center; gap: 10px; padding: 0 20px; border-radius: 22px; font-size: 15px; color: rgba(255, 255, 255, .86); }
+.gl-nav button.is-on { background: rgba(255, 255, 255, .14); color: #fff; }
+.gl-nav button:active { background: rgba(255, 255, 255, .2); }
+
+/* ---- columns */
+.gl-left { grid-area: left; display: flex; flex-direction: column; gap: 16px; }
+.gl-right {
+  grid-area: right; display: grid;
+  grid-template-columns: 393fr 370fr;
+  grid-template-rows: minmax(0, 1fr) 152px 158px 80px;
+  grid-template-areas:
+    "photo photo"
+    "wx wx"
+    "music match"
+    "quote quote";
+  gap: 12px 14px;
+}
+.gl-right > *, .gl-left > * { min-width: 0; min-height: 0; }
+
+/* ---- hero */
+.gl-hero { flex: none; display: flex; flex-direction: column; padding-top: 18px; }
+.gl-date { font-size: 13px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; }
+.gl-clock { display: flex; align-items: flex-start; margin-top: 4px; align-self: flex-start; }
+.gl-time { font-size: 112px; font-weight: 700; line-height: .86; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.gl-clock sup { font-size: 30px; font-weight: 500; margin: 4px 0 0 12px; line-height: 1; }
+.gl-greet { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.05; margin-top: 10px; }
+.gl-sub { font-size: 19px; line-height: 1.3; color: rgba(255, 255, 255, .78); margin-top: 6px; }
+
+/* ---- cards */
+.gl-card {
+  position: relative; border-radius: 22px; padding: 16px 20px; text-align: left; color: #fff; overflow: hidden;
+  background: rgba(30, 24, 20, .58);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+}
+.gl-card-head { display: flex; align-items: center; justify-content: space-between; }
+.gl-card-head h3 { font-size: 19px; font-weight: 500; }
+.gl-card-head .i { color: rgba(255, 255, 255, .8); }
+
+/* ---- Moments carousel */
+.gl-photo { grid-area: photo; padding: 0; background: #14110f; }
+.gl-ph-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .8s ease; }
+.gl-ph-img.is-on { opacity: 1; }
+.gl-ph-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .5) 0%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0) 70%, rgba(0, 0, 0, .35) 100%); }
+.gl-ph-cap { position: absolute; top: 16px; left: 22px; right: 80px; display: flex; gap: 12px; align-items: flex-start; text-shadow: 0 1px 6px rgba(0, 0, 0, .45); }
+.gl-ph-cap > div { min-width: 0; }
+.gl-ph-cap b { display: block; font-size: 17px; font-weight: 600; }
+.gl-ph-sub { display: block; font-size: 13px; color: rgba(255, 255, 255, .88); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-ph-nav {
+  position: absolute; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff;
+  background: rgba(0, 0, 0, .35); border: 1px solid rgba(255, 255, 255, .35);
+}
+.gl-ph-nav:active { background: rgba(255, 255, 255, .25); }
+.gl-ph-prev { left: 18px; }
+.gl-ph-prev .i { transform: rotate(180deg); }
+.gl-ph-next { right: 18px; }
+.gl-ph-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 2px; }
+/* 8 px dots inside larger tap targets */
+.gl-ph-dots button { width: 24px; height: 20px; display: grid; place-items: center; }
+.gl-ph-dots button::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, .5); }
+.gl-ph-dots button.is-on::before { background: #fff; }
+
+/* ---- weather | hourly | air quality */
+.gl-wx { grid-area: wx; display: grid; grid-template-columns: 172px minmax(0, 1fr) 280px; align-items: center; padding: 14px 22px 14px 24px; }
+.gl-wx-now { min-width: 0; }
+.gl-wx-place { display: flex; align-items: center; gap: 8px; font-size: 17px; white-space: nowrap; overflow: hidden; }
+.gl-wx-place span { overflow: hidden; text-overflow: ellipsis; }
+.gl-wx-cur { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.gl-wx-now.is-wet .gl-wx-cur .i { color: #8EC5FF; }
+.gl-wx-temp { font-size: 48px; font-weight: 500; line-height: 1; letter-spacing: -.03em; }
+.gl-wx-label { font-size: 17px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-wx-hl { font-size: 14px; color: rgba(255, 255, 255, .78); white-space: pre; }
+.gl-wx-hours {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-self: stretch; align-items: center;
+  padding: 0 10px; border-left: 1px solid rgba(255, 255, 255, .18); border-right: 1px solid rgba(255, 255, 255, .18);
+}
+.gl-wx-hours li { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.gl-wx-hours li span { font-size: 13px; color: rgba(255, 255, 255, .8); white-space: nowrap; }
+.gl-wx-hours li b { font-size: 16px; font-weight: 600; }
+.gl-wx-hours li.is-wet .i { color: #8EC5FF; }
+.gl-wx-aqi { padding-left: 20px; min-width: 0; }
+
+/* ---- air quality (live), right part of the weather card */
+.gl-aqi-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gl-aqi-head .i { color: #3DBE5A; }
+.gl-aqi-val { font-size: 21px; font-weight: 700; line-height: 1.1; }
+.gl-aqi-cat { display: block; font-size: 16px; color: rgba(255, 255, 255, .9); margin: 2px 0 12px 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-aqi-head .gl-aqi-cat { margin: 0 0 12px; }
+.gl-aqi-bar { position: relative; display: flex; height: 8px; border-radius: 4px; }
+.gl-aqi-bar i { flex: 1; }
+.gl-aqi-bar i:first-child { border-radius: 4px 0 0 4px; }
+.gl-aqi-bar i:last-of-type { border-radius: 0 4px 4px 0; }
+.gl-aqi-dot { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(0, 0, 0, .25); }
+.gl-aqi-advice {
+  font-size: 12px; line-height: 1.3; color: rgba(255, 255, 255, .75); margin-top: 10px;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+/* ---- news (demo) */
+.gl-news-card { flex: 1; padding: 20px 24px; }
+.gl-news { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.gl-news li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 16px; align-items: center; }
+.gl-news img { width: 84px; height: 68px; border-radius: 10px; object-fit: cover; background: rgba(255, 255, 255, .08); }
+.gl-news small { display: block; font-size: 12px; color: rgba(255, 255, 255, .7); }
+.gl-news b {
+  display: -webkit-box; font-size: 16px; font-weight: 500; line-height: 1.25; margin-top: 3px;
+  overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+/* ---- music (demo) */
+.gl-music-card { grid-area: music; padding: 14px 18px; background: rgba(28, 34, 26, .6); }
+.gl-music-tag { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.gl-music-tag i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #1DB954; color: #0b1f12; }
+.gl-music { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 16px; margin-top: 8px; }
+.gl-music img { width: 86px; height: 86px; border-radius: 10px; object-fit: cover; background: rgba(255, 255, 255, .08); }
+.gl-music-meta { min-width: 0; }
+.gl-music-meta b { display: block; font-size: 16px; font-weight: 500; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-music-meta > span { display: block; font-size: 13px; color: rgba(255, 255, 255, .78); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-progress { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .25); margin-top: 8px; }
+.gl-progress i { display: block; height: 100%; min-width: 6px; border-radius: 2px; background: #fff; }
+.gl-times { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255, 255, 255, .7); margin-top: 3px; }
+.gl-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+.gl-play { width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .8); display: grid; place-items: center; }
+
+/* ---- football (demo) */
+.gl-match-card { grid-area: match; padding: 14px 18px; display: flex; flex-direction: column; }
+.gl-match-tag { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.gl-pill { font-size: 12px; padding: 3px 10px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .25); background: rgba(255, 255, 255, .06); white-space: nowrap; }
+.gl-match { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; }
+.gl-match b { font-size: 16px; font-weight: 500; text-align: center; line-height: 1.25; min-width: 0; }
+.gl-crest { flex: none; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 800; letter-spacing: .04em; border: 2px solid rgba(255, 255, 255, .85); }
+.gl-match-when { text-align: center; font-size: 15px; margin-top: 8px; }
+.gl-match-venue { text-align: center; font-size: 12px; color: rgba(255, 255, 255, .72); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- quote of the day */
+.gl-quote { grid-area: quote; display: grid; grid-template-columns: 172px minmax(0, 1fr); align-items: center; gap: 22px; padding: 9px 30px 9px 24px; }
+.gl-quote-head { display: flex; flex-direction: column; gap: 0; white-space: nowrap; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: rgba(255, 255, 255, .72); line-height: 1.25; }
+.gl-quote-mark { font-family: var(--serif); font-size: 52px; line-height: .55; height: 24px; color: #FFB25F; letter-spacing: 0; }
+.gl-quote figure, .gl-quote blockquote { margin: 0; min-width: 0; }
+.gl-quote blockquote {
+  font-family: var(--serif); font-style: italic; font-size: 20px; line-height: 1.15;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.gl-quote figcaption { font-size: 13px; color: rgba(255, 255, 255, .72); margin-top: 3px; }
+
+/* ---- chores strip */
+.gl-chores { grid-area: chores; display: flex; align-items: center; gap: 20px; padding: 0 22px 0 28px; }
+.gl-ch-sum { display: flex; align-items: center; gap: 16px; padding-right: 24px; border-right: 1px solid rgba(255, 255, 255, .2); flex: none; }
+.gl-ch-sum span { display: block; font-size: 15px; }
+.gl-ch-sum b { display: block; font-size: 19px; font-weight: 700; }
+.gl-ch-chips { flex: 1; display: flex; gap: 12px; overflow: hidden; min-width: 0; }
+.gl-chip { flex: none; display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 18px 0 12px; border-radius: 12px; font-size: 15px; white-space: nowrap; background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); }
+.gl-chip i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 2px solid #E9A23B; }
+.gl-chip.is-done i { background: #3DBE5A; border-color: #3DBE5A; color: #fff; }

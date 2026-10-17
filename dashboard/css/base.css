@@ -292,6 +292,28 @@ button.card:active, .h-hero:active, .h-photo:active { transform: scale(.985); }
 }
 .demo-grid button:active, .demo-grid button.is-on { background: #fff; color: var(--ink); }
 .demo-note { font-size: 16px; color: rgba(255, 255, 255, .6); }
+/* weather location (city search) */
+.loc-now { font-size: 18px; margin-top: 8px; }
+.loc-form { display: flex; gap: 8px; margin-top: 10px; }
+.loc-input {
+  flex: 1; min-width: 0; min-height: var(--tap); border-radius: 14px; padding: 0 16px;
+  background: #fff; color: var(--ink); font: inherit; font-size: 20px; border: 0; outline: none;
+}
+.loc-input::placeholder { color: var(--mute); }
+.loc-go { min-height: var(--tap); border-radius: 14px; padding: 0 18px; background: rgba(255, 255, 255, .1); font-size: 18px; font-weight: 700; }
+.loc-go:active { background: #fff; color: var(--ink); }
+.loc-form [disabled], .loc-results [disabled], .loc-reset[disabled] { opacity: .5; }
+.loc-status { font-size: 16px; color: rgba(255, 255, 255, .72); margin-top: 10px; }
+.loc-status.is-error { color: #FFB4A8; }
+.loc-results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.loc-results button {
+  text-align: left; min-height: var(--tap); border-radius: 14px; padding: 8px 16px;
+  background: rgba(255, 255, 255, .1); display: flex; flex-direction: column; justify-content: center;
+}
+.loc-results button:active { background: #fff; color: var(--ink); }
+.loc-results b { font-size: 18px; }
+.loc-results span { font-size: 15px; opacity: .72; }
+.loc-reset { margin-top: 10px; font-size: 16px; text-decoration: underline; color: rgba(255, 255, 255, .72); min-height: 36px; }
 
 /* ---------------------------------------------------------------- night dashboard (tap on night clock) */
 .stage[data-mode="nightdash"] > .rail,
@@ -309,3 +331,8 @@ button.card:active, .h-hero:active, .h-photo:active { transform: scale(.985); }
 }
 .diag b { color: #fff; }
 .diag u { text-decoration: none; color: #aaa; }
+
+/* ---------------------------------------------------------------- full-bleed views (no rail) */
+.stage.is-fullbleed { grid-template-columns: 1fr; }
+.stage.is-fullbleed > .rail { display: none; }
+.stage.is-fullbleed .view.is-active { padding: 0; }

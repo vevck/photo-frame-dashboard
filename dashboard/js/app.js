@@ -21,6 +21,20 @@
     App.emit('time');
     App.rerender();
   };
+
+  // ------------------------------------------------------------ clock format (12/24-hour)
+  // Saved per device in localStorage, so the frame keeps its choice across reloads and reboots.
+  var CLOCK_KEY = 'homehq.clock24';
+  App.clock24 = false;
+  try { App.clock24 = localStorage.getItem(CLOCK_KEY) === '1'; } catch (e) {}
+  App.setClock24 = function (on) {
+    App.clock24 = !!on;
+    try { localStorage.setItem(CLOCK_KEY, App.clock24 ? '1' : '0'); } catch (e) {}
+    lastMin = -1;
+    App.emit('time');
+    App.rerender();
+    tick(); // redraw the sidebar clock now rather than on the next second
+  };
   App.dayStart = function (d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
   App.addDays = function (d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; };
   App.sameDay = function (a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
@@ -30,18 +44,28 @@
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   var MON_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
   App.fmt = {
+    // "3:45 PM" / "3:45" (ampm false); 24-hour: "15:45" either way
     time: function (d, ampm) {
-      var h = d.getHours(), m = d.getMinutes();
-      var s = (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m;
+      var h = d.getHours(), m = d.getMinutes(), mm = (m < 10 ? '0' : '') + m;
+      if (App.clock24) return (h < 10 ? '0' : '') + h + ':' + mm;
+      var s = (h % 12 || 12) + ':' + mm;
       return ampm === false ? s : s + ' ' + (h >= 12 ? 'PM' : 'AM');
     },
-    // "4 PM", "3:45 PM"
+    // "4 PM", "3:45 PM"; 24-hour: "16:00", "15:45"
     hour: function (d) {
       var h = d.getHours(), m = d.getMinutes();
+      if (App.clock24) return App.fmt.time(d);
       return (h % 12 || 12) + (m ? ':' + (m < 10 ? '0' : '') + m : '') + ' ' + (h >= 12 ? 'PM' : 'AM');
     },
-    ampm: function (d) { return d.getHours() >= 12 ? 'PM' : 'AM'; },
+    // Compact hour label for axes and hourly strips: "4p" / "4 PM"; 24-hour: "16"
+    hourLabel: function (h, long) {
+      if (App.clock24) return (h < 10 ? '0' : '') + h + (long ? ':00' : '');
+      return (h % 12 || 12) + (long ? (h < 12 ? ' AM' : ' PM') : (h >= 12 ? 'p' : 'a'));
+    },
+    // "" in 24-hour mode, so callers that print it separately show nothing
+    ampm: function (d) { return App.clock24 ? '' : d.getHours() >= 12 ? 'PM' : 'AM'; },
     range: function (a, b) {
+      if (App.clock24) return App.fmt.time(a) + ' – ' + App.fmt.time(b);
       var same = App.fmt.ampm(a) === App.fmt.ampm(b);
       return (same ? App.fmt.time(a, false) : App.fmt.time(a)) + ' – ' + App.fmt.time(b);
     },
@@ -128,31 +152,62 @@
     for (var i = 0; i < D.routines.length; i++) if (h >= D.routines[i].from && h < D.routines[i].to) return D.routines[i];
     return D.routines[2];
   };
+  // Weather is a timeline of real hours (see weather.js), so lookups go by timestamp, not hour of day:
+  // the hourly strip runs on into tomorrow after midnight and the rain check looks past 11 PM.
+  // All weather text and thresholds come from weather-config.js.
+  var WXC = window.WEATHER_CONFIG;
+  // Weather text by "section.key", with {placeholders} filled from vals: App.wxText('summary.rainFrom', { time: '4 PM' })
+  App.wxText = function (path, vals) {
+    var p = path.split('.'), s = WXC[p[0]] && WXC[p[0]][p[1]];
+    if (s == null) return path;
+    return String(s).replace(/\{(\w+)\}/g, function (m, k) { return vals && vals[k] != null ? vals[k] : m; });
+  };
+  // Label for an hour: by key, falling back to text stored by older cached forecasts.
+  function wxLabel(h) { return (h.k && WXC.conditions[h.k]) || h.l || ''; }
+  function wxIndex() {
+    var hrs = D.weather.hours, now = App.now().getTime();
+    for (var i = hrs.length - 1; i >= 0; i--) if (hrs[i].at <= now) return i;
+    return 0;
+  }
+  function atHour(h) {
+    var d = new Date(h.at), today = App.dayStart(App.now());
+    var s = App.fmt.hour(d);
+    if (App.sameDay(d, today)) return s;
+    return App.sameDay(d, App.addDays(today, 1)) ? App.wxText('when.tomorrow', { time: s }) : App.wxText('when.otherDay', { day: App.fmt.dayShort(d), time: s });
+  }
+  // Night is between today's sunset and sunrise. Demo data has no sun times, so it falls back to fixed hours.
+  function isNight(W) {
+    var now = App.now(), t = now.getTime();
+    if (W.sunrise && W.sunset) return t < W.sunrise || t >= W.sunset;
+    var N = WXC.settings.fallbackNight, h = now.getHours();
+    return h >= N.from || h < N.to;
+  }
   App.weatherNow = function () {
-    var W = D.weather, h = App.now().getHours();
-    var rainAt = -1;
-    for (var i = h; i < 24; i++) if (W.p[i] >= 50) { rainAt = i; break; }
-    var summary, advice;
-    if (rainAt === h) {
-      var stop = h; while (stop < 24 && W.p[stop] >= 50) stop++;
-      summary = 'Rain until ' + App.fmt.hour(new Date(2000, 0, 1, stop));
-      advice = 'Umbrella weather';
+    var W = D.weather, S = WXC.settings, hrs = W.hours, i0 = wxIndex(), cur = hrs[i0];
+    var end = Math.min(hrs.length, i0 + S.rainLookaheadHours + 1), rainAt = -1;
+    for (var i = i0; i < end; i++) if (hrs[i].p >= S.rainChancePct) { rainAt = i; break; }
+    var summary, advice, cool = cur.t < S.coolBelowC;
+    if (rainAt === i0) {
+      var stop = i0; while (stop < hrs.length && hrs[stop].p >= S.rainChancePct) stop++;
+      summary = stop < hrs.length ? App.wxText('summary.rainUntil', { time: atHour(hrs[stop]) }) : App.wxText('summary.rainForAWhile');
+      advice = App.wxText('advice.umbrella');
     } else if (rainAt > -1) {
-      summary = 'Rain from ' + App.fmt.hour(new Date(2000, 0, 1, rainAt));
-      var soccer = App.timedOn(App.now()).filter(function (e) { return /soccer/i.test(e.title) && e.start > App.now(); })[0];
-      advice = soccer ? 'Pack a rain jacket for soccer' : 'Grab a rain jacket';
+      summary = App.wxText('summary.rainFrom', { time: atHour(hrs[rainAt]) });
+      advice = App.wxText('advice.rainJacket');
     } else {
-      summary = W.t[h] < 12 ? 'Clear and cool' : 'Dry all day';
-      advice = W.t[h] < 12 ? 'Jacket weather' : 'Light layers';
+      summary = App.wxText(cool ? 'summary.clearAndCool' : isNight(W) ? 'summary.dryTonight' : 'summary.dryAllDay');
+      advice = App.wxText(cool ? 'advice.jacket' : 'advice.lightLayers');
     }
-    var labels = { sun: 'Sunny', moon: 'Clear', partly: 'Partly cloudy', cloud: 'Overcast', rain: 'Rain' };
-    return { temp: W.t[h], cond: W.c[h], label: labels[W.c[h]], hi: W.hi, lo: W.lo, summary: summary, advice: advice, hour: h };
+    var ageMin = W.updated ? Math.round((Date.now() - W.updated) / 60000) : null;
+    return { temp: cur.t, cond: cur.c, label: wxLabel(cur), hi: W.hi, lo: W.lo, summary: summary, advice: advice, hour: new Date(cur.at).getHours(),
+      place: W.place ? W.place.name : '', live: W.live, ageMin: ageMin, stale: ageMin != null && ageMin > S.staleAfterMinutes, night: isNight(W),
+      sunrise: W.sunrise ? new Date(W.sunrise) : null, sunset: W.sunset ? new Date(W.sunset) : null };
   };
   App.hourly = function (count) {
-    var W = D.weather, h = App.now().getHours(), out = [];
-    for (var i = 0; i < count; i++) {
-      var x = (h + i) % 24;
-      out.push({ h: x, t: W.t[x], c: W.c[x], p: W.p[x], label: i === 0 ? 'Now' : ((x % 12 || 12) + (x >= 12 ? 'p' : 'a')) });
+    var hrs = D.weather.hours, i0 = wxIndex(), out = [];
+    for (var i = i0; i < hrs.length && out.length < count; i++) {
+      var x = new Date(hrs[i].at).getHours();
+      out.push({ h: x, t: hrs[i].t, c: hrs[i].c, p: hrs[i].p, label: i === i0 ? App.wxText('display.now') : App.fmt.hourLabel(x) });
     }
     return out;
   };
@@ -176,6 +231,8 @@
     App.$$('.rail-item').forEach(function (b) { b.classList.toggle('is-active', b.dataset.go === name); });
     App.current = name;
     var view = App.views[name];
+    // A view may take the whole stage (no rail), e.g. a full-bleed Today layout.
+    $('#stage').classList.toggle('is-fullbleed', !!(view.fullbleed && view.fullbleed()));
     if (!view._built || view._dirty || opts.rerender || (view.minutely && view._min !== minuteKey())) build(name, opts);
     else if (view.resume) view.resume($('#view-' + name));
     if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
@@ -327,7 +384,7 @@
 
   // ------------------------------------------------------------ boot
   App.start = function () {
-    App.setTime(15, 18); // demo default: a busy weekday afternoon
+    App.setTime(null); // real time from the device clock (demo times stay in the clock's hold menu)
     fit();
     window.addEventListener('resize', fit);
     // Switch tabs the instant a finger lands (pointerdown), not on release. Keyboard "clicks"
@@ -347,7 +404,7 @@
     setInterval(tick, 1000);
     App.emit('ready');
     refreshStale(1500);
-    setTimeout(function () { App.toast('Tip: press and hold the <b>clock</b> in the sidebar for demo controls', { ms: 6000, icon: 'bolt' }); }, 1200);
+    setTimeout(function () { var L = App.activeHomeLayout && App.activeHomeLayout(); App.toast((L && L.controlsTip) || 'Tip: press and hold the <b>clock</b> for HomeDash controls', { ms: 6000, icon: 'bolt' }); }, 1200);
   };
   document.addEventListener('DOMContentLoaded', function () { App.start(); });
 })();

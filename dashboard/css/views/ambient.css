@@ -8,6 +8,9 @@
 .amb-date { font-family: var(--serif); font-size: 38px; margin-top: 16px; }
 .amb-right { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
 .amb-wx { display: flex; align-items: center; gap: 12px; }
+/* City and summary share one left-aligned column beside the temperature. */
+.amb-wx-text { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 220px; min-width: 0; }
+.amb-place { display: block; max-width: 100%; font-size: 26px; font-weight: 800; color: var(--alert); line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 8px rgba(0, 0, 0, .35); }
 .amb-wx .num { font-size: 72px; line-height: .8; }
 .amb-wx small { font-family: var(--serif); font-size: 26px; font-style: italic; max-width: 220px; line-height: 1.05; }
 .amb-next {
