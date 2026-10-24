@@ -24,6 +24,7 @@
     prev: '<path d="M18 5v14l-10-7z" fill="currentColor"/><path d="M6 5v14"/>',
     next: '<path d="M6 5v14l10-7z" fill="currentColor"/><path d="M18 5v14"/>',
     leaf: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15"/><path d="M5 19l7-7"/>',
+    quote: '<path d="M10 7H6a2 2 0 0 0-2 2v4h5v5l1-1c1.5-1.5 2-3 2-5V9a2 2 0 0 0-2-2zM20 7h-4a2 2 0 0 0-2 2v4h5v5l1-1c1.5-1.5 2-3 2-5V9a2 2 0 0 0-2-2z"/>',
     checklist: '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M7.5 9l2 2 3.5-3.5M7.5 15.5h9"/>',
     ball: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5l3.4 2.5-1.3 4h-4.2l-1.3-4zM12 3.5v4M15.4 10l4.3-1.4M14.1 14l2.6 3.6M9.9 14l-2.6 3.6M8.6 10L4.3 8.6"/>'
   };
@@ -38,13 +39,15 @@
   }
 
   // ---------------------------------------------------------------- header
-  function header() {
+  // `active` is the nav key shown as selected ('home' on the Today screen, 'quotes' on the Quotes screen).
+  function header(active) {
     var nav = C.text.nav;
+    active = active || 'home';
     return '<header class="gl-head">' +
       '<div class="gl-brand" role="button" aria-label="' + esc(t('brand')) + ' — press and hold for HomeDash controls">' + ic('home', 30) + '<b>' + esc(t('brand')) + '</b></div>' +
       '<nav class="gl-nav">' + Object.keys(nav).map(function (k) {
-        var icon = { home: 'home', calendar: 'calendar', tasks: 'users', shopping: 'list', photos: 'photo' }[k];
-        return '<button data-go="' + k + '" class="' + (k === 'home' ? 'is-on' : '') + '">' + ic(icon, 20) + '<span>' + esc(nav[k]) + '</span></button>';
+        var icon = { home: 'home', calendar: 'calendar', tasks: 'users', shopping: 'list', photos: 'photo', quotes: 'quote' }[k];
+        return '<button data-go="' + k + '" class="' + (k === active ? 'is-on' : '') + '">' + ic(icon, 20) + '<span>' + esc(nav[k]) + '</span></button>';
       }).join('') + '</nav></header>';
   }
 
@@ -58,7 +61,7 @@
       date: esc(App.fmt.day(n) + ', ' + n.getDate() + ' ' + App.fmt.month(n)),
       clock: '<span class="gl-time">' + App.fmt.time(n, false) + '</span>' + (ampm ? '<sup>' + ampm + '</sup>' : ''),
       greet: esc(t('greeting.' + p)),
-      sub: esc(w.summary + '. ' + t(mood, { period: t('period.' + p) }))
+      sub: esc(w.summary + '. ' + t(mood, { period: t('period.' + p), when: t('when.' + p) }))
     };
   }
 
@@ -133,7 +136,7 @@
 
   // ---------------------------------------------------------------- news (demo)
   function news() {
-    return '<div class="gl-card-head"><h3>' + esc(t('newsTitle', { period: t('period.' + period(App.now())) })) + '</h3>' + ic('chevron', 22) + '</div>' +
+    return '<div class="gl-card-head"><h3>' + esc(t('newsTitle', { when: t('when.' + period(App.now())) })) + '</h3>' + ic('chevron', 22) + '</div>' +
       '<ul class="gl-news">' + C.demo.news.map(function (a) {
         return '<li><img src="' + App.img(a.seed, 160, 128) + '" alt="" loading="lazy"><div><small>' + esc(a.topic) + ' · ' + esc(t('readTime', { n: a.mins })) + '</small>' +
           '<b>' + esc(a.title) + '</b></div></li>';
@@ -181,11 +184,32 @@
   }
 
   // ---------------------------------------------------------------- quote of the day
+  // Quote of the day from the Quotify sheet (quotes-data.js), the same one the Quotes screen features.
+  // Text size steps down with length so even the longest quotes fit the 80 px card.
+  App.quoteSize = function (text) { var n = text.length; return n <= 100 ? 's' : n <= 150 ? 'm' : 'l'; };
+  // Paint the card, then step the size down (s -> m -> l) until the quote and author fit inside the
+  // card's padding. Measuring beats character counts: letter widths vary and the frame's fonts differ.
+  var STEPS = ['s', 'm', 'l'];
+  function fitQuote() {
+    var card = G.el && G.el.querySelector('.gl-quote'), fig = card && card.querySelector('figure');
+    if (!fig) return;
+    var pad = parseFloat(getComputedStyle(card).paddingBottom) || 0;
+    for (var k = STEPS.indexOf(fig.className.replace('q-', '')); k < STEPS.length; k++) {
+      fig.className = 'q-' + STEPS[k];
+      var bq = fig.querySelector('blockquote'), c = card.getBoundingClientRect(), f = fig.getBoundingClientRect();
+      // +3: italic descenders poke ~2 px below the line box without anything being cut off.
+      if (bq.scrollHeight <= bq.clientHeight + 3 && f.bottom <= c.bottom - pad + 1 && f.top >= c.top + pad - 1) return;
+    }
+  }
+  function paintQuote() { paintPart('.gl-quote', quote()); fitQuote(); }
+  // Web fonts can arrive after the first paint and change line breaks: fit again once they're ready.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitQuote(); });
   function quote() {
-    var n = App.now(), day = Math.floor(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 864e5);
-    var q = C.quotes[day % C.quotes.length];
+    var list = App.quoteList(), q = list[App.quoteOfDay()];
+    if (!q) return '';
     return '<div class="gl-quote-head"><span class="gl-quote-mark">“</span><span>' + esc(t('quoteTitle')) + '</span></div>' +
-      '<figure><blockquote>' + esc(q.text) + '</blockquote><figcaption>— ' + esc(q.by) + '</figcaption></figure>';
+      '<figure class="q-' + App.quoteSize(q.text) + '"><blockquote>' + esc(q.text) + '</blockquote>' +
+      '<figcaption>— ' + esc(q.by) + (q.catLabel ? ' · ' + esc(q.catLabel) : '') + '</figcaption></figure>';
   }
   function loadAqi() {
     var p = App.weatherPlace(), key = p.lat + ',' + p.lon;
@@ -228,7 +252,7 @@
   function paintAll() {
     paintHero();
     paintPart('.gl-wx', weather()); paintPart('.gl-news-card', news()); paintPart('.gl-music-card', music());
-    paintPart('.gl-match-card', match()); paintPart('.gl-quote', quote()); paintPart('.gl-chores', chores());
+    paintPart('.gl-match-card', match()); paintQuote(); paintPart('.gl-chores', chores());
   }
   // Two columns, as in the design: left = clock/greeting over news; right = photos, weather, music | football,
   // quote. They're laid out independently because the left column's boxes don't line up with the right's rows.
@@ -256,6 +280,16 @@
     App.hold(el.querySelector('.gl-brand'), S.logoHoldSeconds * 1000, { done: App.openDemo });
   }
 
+  // Shared Glass chrome for other screens (the Quotes screen): background + top bar with one item selected.
+  // wire() makes the nav buttons navigate and the HomeDash logo open HomeDash Controls, as on Today.
+  App.glassChrome = {
+    html: function (active) { return '<div class="gl-bg"></div>' + header(active); },
+    wire: function (el) {
+      el.addEventListener('click', function (e) { var g = e.target.closest('.gl-nav [data-go]'); if (g) App.go(g.dataset.go); });
+      App.hold(el.querySelector('.gl-brand'), S.logoHoldSeconds * 1000, { done: App.openDemo });
+    }
+  };
+
   App.registerHomeLayout('glass', {
     label: 'Glass',
     controlsTip: 'Tip: press and hold the <b>' + App.esc(C.text.brand) + '</b> logo for ' + S.logoHoldSeconds + ' seconds for HomeDash controls',
@@ -271,7 +305,7 @@
     minute: function (n) {
       if (!G.el) return;
       paintHero();
-      if (n.getMinutes() === 0) { paintPart('.gl-wx', weather()); paintPart('.gl-chores', chores()); paintPart('.gl-match-card', match()); paintPart('.gl-quote', quote()); }
+      if (n.getMinutes() === 0) { paintPart('.gl-wx', weather()); paintPart('.gl-chores', chores()); paintPart('.gl-match-card', match()); paintQuote(); }
     },
     resume: function () { if (G.el) carouselStart(); },
     hide: function () { carouselStop(); },

@@ -1,5 +1,6 @@
 // "Glass" Today layout: its settings, text and demo content, in one place.
-// Clock, greeting, weather, air quality and chores are live; the quote rotates daily from the list below;
+// Clock, greeting, weather, air quality and chores are live; quotes come from the Quotify Google Sheet
+// (quotesSource below, loaded by quotes-data.js) with the short list below as the offline fallback;
 // news, music and football are demo content until real sources are chosen. Text may contain {placeholders} (filled by App.glassText).
 window.GLASS_CONFIG = {
   settings: {
@@ -13,14 +14,16 @@ window.GLASS_CONFIG = {
 
   text: {
     brand: 'HomeDash',
-    nav: { home: 'Dashboard', calendar: 'Calendar', tasks: 'Family', shopping: 'Lists', photos: 'Photos' },
+    nav: { home: 'Dashboard', calendar: 'Calendar', tasks: 'Family', shopping: 'Lists', photos: 'Photos', quotes: 'Quotes' },
     // Greeting by time of day: morning 5–12, afternoon 12–17, evening 17–22, night 22–5.
     greeting: { morning: 'Good morning.', afternoon: 'Good afternoon.', evening: 'Good evening.', night: 'Good night.' },
     period: { morning: 'morning', afternoon: 'afternoon', evening: 'evening', night: 'night' },
     busy: 'A busy {period} ahead.',
     calm: 'A calm {period} ahead.',
-    free: 'Nothing else planned this {period}.',
-    newsTitle: 'Top news, this {period}',
+    // {when} reads naturally after a phrase: "this evening", but "tonight" rather than "this night".
+    when: { morning: 'this morning', afternoon: 'this afternoon', evening: 'this evening', night: 'tonight' },
+    free: 'Nothing else planned {when}.',
+    newsTitle: 'Top news, {when}',
     readTime: '{n} min read',
     lastPlayed: 'Last played',
     inDays: 'In {n} days',
@@ -30,6 +33,8 @@ window.GLASS_CONFIG = {
     aqiValue: 'AQI {n}',
     aqiUnavailable: 'Air quality unavailable',
     quoteTitle: 'Quote of the day',
+    // Quotes screen (views/quotes.js)
+    quotesPage: { title: 'Quotes', today: 'Quote of the day', nth: 'Quote {n} of {total}', todayTag: 'Today', back: 'Back to today', all: 'All', count: '{n} quotes', empty: 'No quotes in this category.' },
     moments: 'Moments',
     momentsCaption: '{place} · {when}',
     updated: { justNow: 'Updated just now', minutes: 'Updated {n} min ago', hours: 'Updated {n} h ago' },
@@ -48,8 +53,25 @@ window.GLASS_CONFIG = {
     { max: 500, label: 'Hazardous', color: '#7E2340', advice: 'Stay indoors and keep activity levels low.' }
   ],
 
-  // ---------------------------------------------------------------- quote of the day
-  // One per day, in order, starting again at the end. Keep each under ~120 characters (two lines).
+  // ---------------------------------------------------------------- quotes source (Quotify's Google Sheet)
+  // Published CSV with columns Category, Quote, Author. The last good copy is kept on the device, so the
+  // screen works offline; until the first load succeeds, `quotes` below is used.
+  quotesSource: {
+    csvUrl: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSto7ATJE0uvdXcwn0ya8s1_d6kthKKO3juVqwGzTGmKOd377SxyC13pVXjBZEfphUmH29ikoMnWDa-/pub?gid=0&single=true&output=csv',
+    refreshHours: 6,               // re-read the sheet this often
+    retryMinutes: 5,               // after a failed read
+    timeoutSeconds: 20
+  },
+  // Display names for the sheet's category codes (matched case-insensitively). Codes not listed here are
+  // shown tidied: "philosophy-xx" -> "Philosophy xx".
+  categoryLabels: {
+    famous: 'Famous', 'sage-in': 'Indian sages', 'mystic-in': 'Indian mystics', philosophy: 'Philosophy',
+    'philosophy-cn': 'Chinese philosophy', 'philosophy-it': 'Italian philosophy', 'philosophy-in': 'Indian philosophy',
+    poet: 'Poets', science: 'Science', tech: 'Tech', literature: 'Literature', startup: 'Startups', movies: 'Movies',
+    inspirational: 'Inspirational', kondur: 'Kondur'
+  },
+
+  // ---------------------------------------------------------------- built-in quotes (offline fallback)
   quotes: [
     { text: 'We suffer more often in imagination than in reality.', by: 'Seneca' },
     { text: 'The happiness of your life depends upon the quality of your thoughts.', by: 'Marcus Aurelius' },
