@@ -147,8 +147,11 @@
 
   function photoCaption(s) {
     var m = App.photoMeta(s.photos[0]);
-    V.el.querySelector('.h-photo-cap').innerHTML = '<b>' + (m.onThisDay ? 'On this day · ' : '') + m.kicker + '</b><span>' + App.esc(m.place) + '</span>';
+    V.el.querySelector('.h-photo-cap').innerHTML = (m.kicker ? '<b>' + (m.onThisDay ? 'On this day · ' : '') + m.kicker + '</b>' : '') + '<span>' + App.esc(m.place) + '</span>';
   }
+
+  // A different album was chosen in Photo settings: the photo tile switches to it (Classic layout only).
+  App.on('photoAlbum', function () { if (V.slides) V.slides.reload(); });
 
   App.register('home', {
     // Another Today layout (home-layouts.js) can replace this screen; it may hide the rail (full-bleed).
@@ -179,7 +182,11 @@
           var g = e.target.closest('[data-go]');
           if (g) App.go(g.dataset.go);
         });
-        V.slides = new App.Slideshow(el.querySelector('.h-photo-stage'), { layout: 'cover', captions: false, interval: 12000, onChange: photoCaption });
+        // Same photos as the Photos tab: the album chosen in Photo settings, or the demo photos.
+        V.slides = new App.Slideshow(el.querySelector('.h-photo-stage'), {
+          layout: 'cover', captions: false, interval: 12000, onChange: photoCaption,
+          source: function () { return App.photoAlbum().photos; }
+        });
       }
       paint();
       V.slides.start();

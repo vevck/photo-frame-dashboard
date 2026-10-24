@@ -349,11 +349,22 @@
   // ------------------------------------------------------------ idle
   App.idle = { home: 60, ambient: 120 };
   var idleSec = 0;
+  // Photos can stay up when idle (toggle in the Photos gear panel, saved per device). On by default:
+  // Photos returns to Today and then Ambient like every tab. Off: it stays until Night mode (10 PM).
+  var PHOTOS_IDLE_KEY = 'homehq.photosIdleReturn';
+  App.photosIdleReturn = true;
+  try { App.photosIdleReturn = localStorage.getItem(PHOTOS_IDLE_KEY) !== '0'; } catch (e) {}
+  App.setPhotosIdleReturn = function (on) {
+    App.photosIdleReturn = !!on;
+    try { if (App.photosIdleReturn) localStorage.removeItem(PHOTOS_IDLE_KEY); else localStorage.setItem(PHOTOS_IDLE_KEY, '0'); } catch (e) {}
+  };
   function onIdleTick() {
     idleSec++;
     var blocked = $('#takeover').classList.contains('is-open');
     if (App.mode === 'nightdash' && idleSec >= 20) { App.setMode('night'); return; }
     if (App.mode !== 'day' || blocked) return;
+    var stay = App.current === 'photos' && !App.photosIdleReturn;
+    if (stay && !(idleSec >= App.idle.ambient && App.isNight())) return;
     if (idleSec === App.idle.home && App.current !== 'home') { App.closeSheet(); App.go('home'); }
     if (idleSec >= App.idle.ambient) {
       App.closeSheet();

@@ -52,3 +52,10 @@
 .ph-btn--fav { padding: 0 24px 0 20px; }
 .ph-btn--fav.is-on { background: #E4007C; }
 .ph-btn--fav.is-on .i { fill: currentColor; }
+.ph-top { display: flex; align-items: center; gap: 10px; }
+.ph-gear { padding: 0; width: var(--tap); }
+
+/* Album panel (gear): same drawer as HomeDash Controls, inside the Photos view */
+.ph-album { z-index: 6; }
+.ph-albums button.is-on { background: #fff; color: var(--ink); }
+.ph-albums button.is-on span { opacity: .6; }

@@ -82,18 +82,24 @@
 
   // ---------------------------------------------------------------- Moments photo carousel
   // A fixed set (on-this-day first, then newest landscape photos) so the dots mean something.
+  // Photos come from the album chosen in Photo settings, or the demo photos. An album with no landscape
+  // photos uses its portrait ones (cropped to fill). Album photos without a date sort last.
   // Two stacked images cross-fade; the next one is shown only after it has loaded.
   var CAR = { list: [], i: 0, timer: null, front: 0 };
   function carouselList() {
-    var land = D.photos.filter(function (p) { return p.o === 'l'; });
+    var all = App.photoAlbum().photos || D.photos;
+    var land = all.filter(function (p) { return p.o === 'l'; });
+    if (!land.length) land = all.slice();
     land.sort(function (a, b) {
       var ma = App.photoMeta(a).onThisDay ? 1 : 0, mb = App.photoMeta(b).onThisDay ? 1 : 0;
-      return mb - ma || (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+      var da = a.date || '', db = b.date || '';
+      return mb - ma || (da < db ? 1 : da > db ? -1 : 0);
     });
     return land.slice(0, S.carouselPhotos);
   }
   function photoCard() {
-    return '<img class="gl-ph-img is-on" alt=""><img class="gl-ph-img" alt=""><div class="gl-ph-shade"></div>' +
+    // no-referrer: Google Photos album images are refused when a Referer is sent.
+    return '<img class="gl-ph-img is-on" alt="" referrerpolicy="no-referrer"><img class="gl-ph-img" alt="" referrerpolicy="no-referrer"><div class="gl-ph-shade"></div>' +
       '<div class="gl-ph-cap">' + ic('photo', 24) + '<div><b>' + esc(t('moments')) + '</b><span class="gl-ph-sub"></span></div></div>' +
       '<button class="gl-ph-nav gl-ph-prev" data-ph="-1" aria-label="Previous photo">' + ic('chevron', 22) + '</button>' +
       '<button class="gl-ph-nav gl-ph-next" data-ph="1" aria-label="Next photo">' + ic('chevron', 22) + '</button>' +
@@ -112,7 +118,7 @@
     }
     if (front.getAttribute('src') === url) done = true;
     else { back.onload = swap; back.onerror = swap; back.setAttribute('src', url); if (back.complete && back.naturalWidth) swap(); }
-    card.querySelector('.gl-ph-sub').textContent = t('momentsCaption', { place: m.place, when: m.kicker });
+    card.querySelector('.gl-ph-sub').textContent = m.kicker ? t('momentsCaption', { place: m.place, when: m.kicker }) : m.place;
     card.querySelector('.gl-ph-dots').innerHTML = CAR.list.map(function (x, k) {
       return '<button data-ph-go="' + k + '" class="' + (k === CAR.i ? 'is-on' : '') + '" aria-label="Photo ' + (k + 1) + '"></button>';
     }).join('');
@@ -122,6 +128,8 @@
     CAR.timer = setInterval(function () { showPhoto(CAR.i + 1); }, S.carouselSeconds * 1000);
   }
   function carouselStop() { clearInterval(CAR.timer); CAR.timer = null; }
+  // A different album was chosen in Photo settings: start the carousel over with its photos.
+  App.on('photoAlbum', function () { if (!G.el) return; CAR.list = carouselList(); showPhoto(0); });
 
   // ---------------------------------------------------------------- news (demo)
   function news() {

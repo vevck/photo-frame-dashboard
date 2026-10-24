@@ -1,4 +1,4 @@
-// Ambient (idle photo frame) and Night (dim red clock) overlays.
+// Ambient (idle photo frame, showing the album chosen in Photo settings) and Night (dim red clock) overlays.
 (function () {
   'use strict';
   var D = window.DATA, $ = App.$;
@@ -38,7 +38,12 @@
   App.on('ready', function () {
     $('#ambient').innerHTML = '<div class="amb-stage"></div><div class="amb-scrim"></div><div class="amb-info"></div>';
     $('#night').innerHTML = '<div class="nt-inner"></div>';
-    amb.show = new App.Slideshow($('#ambient .amb-stage'), { layout: 'cover', captions: false, interval: 14000 });
+    // Same photos as the Photos tab: the album chosen in Photo settings, or the demo photos.
+    amb.show = new App.Slideshow($('#ambient .amb-stage'), {
+      layout: 'cover', captions: false, interval: 14000,
+      source: function () { return App.photoAlbum().photos; }
+    });
+    App.on('photoAlbum', function () { amb.show.reload(); });
     $('#ambient').addEventListener('click', function () { App.setMode('day'); App.go('home'); });
     $('#night').addEventListener('click', function () { App.setMode('nightdash'); });
   });

@@ -6,12 +6,16 @@
   function src(p, big) {
     var w = p.o === 'p' ? 800 : 1600, h = p.o === 'p' ? 1200 : 1000;
     if (!big) { w = Math.round(w / 2); h = Math.round(h / 2); }
+    // Google Photos album image, scaled to fit. Google refuses these when a Referer is sent, so every
+    // slideshow <img> carries referrerpolicy="no-referrer".
+    if (p.src) return p.src + '=w' + w + '-h' + h;
     return App.img(p.seed, w, h);
   }
   App.photoSrc = src;
 
   function parseDate(p) { var a = p.date.split('-'); return new Date(+a[0], +a[1] - 1, +a[2]); }
   App.photoMeta = function (p) {
+    if (!p.date) return { date: '', monthYear: '', kicker: '', onThisDay: false, place: p.place, from: App.person(p.from) };
     var d = parseDate(p), now = App.now();
     var years = now.getFullYear() - d.getFullYear();
     var onThisDay = d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
@@ -31,21 +35,21 @@
   function caption(ps, size) {
     var m = App.photoMeta(ps[0]);
     return '<div class="cap cap--' + (size || 'l') + '">' +
-      '<div class="cap-kicker">' + (m.onThisDay ? '<b>On this day</b> · ' : '') + m.kicker + ' · ' + App.esc(m.place) + '</div>' +
+      '<div class="cap-kicker">' + (m.onThisDay ? '<b>On this day</b> · ' : '') + (m.kicker ? m.kicker + ' · ' : '') + App.esc(m.place) + '</div>' +
       '<div class="cap-date serif">' + (ps.length > 1 ? m.monthYear : m.date) + '</div>' +
       '</div>';
   }
   function kb(p, still) {
     var dx = (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random() * 2.5) + '%';
     var dy = (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random() * 1.5) + '%';
-    return '<div class="kb' + (still ? ' kb--still' : '') + '" style="--dx:' + dx + ';--dy:' + dy + '"><img src="' + src(p, true) + '" alt=""></div>';
+    return '<div class="kb' + (still ? ' kb--still' : '') + '" style="--dx:' + dx + ';--dy:' + dy + '"><img referrerpolicy="no-referrer" src="' + src(p, true) + '" alt=""></div>';
   }
 
   var BUILD = {
     cover: function (ps, o) {
       var p = ps[0];
       if (p.o === 'p') {
-        return '<div class="slide slide--fit"><img class="blurfill" src="' + src(p) + '" alt=""><img class="fitimg" src="' + src(p, true) + '" alt="">' + (o.captions ? caption(ps) : '') + '</div>';
+        return '<div class="slide slide--fit"><img referrerpolicy="no-referrer" class="blurfill" src="' + src(p) + '" alt=""><img referrerpolicy="no-referrer" class="fitimg" src="' + src(p, true) + '" alt="">' + (o.captions ? caption(ps) : '') + '</div>';
       }
       return '<div class="slide slide--cover">' + kb(p) + (o.captions ? caption(ps) : '') + '</div>';
     },
@@ -57,12 +61,13 @@
     },
     polaroid: function (ps) {
       var p = ps[0], m = App.photoMeta(p), rot = (Math.random() * 5 - 2.5).toFixed(1);
-      return '<div class="slide slide--polaroid"><img class="blurfill" src="' + src(p) + '" alt="">' +
-        '<figure class="polaroid polaroid--' + p.o + '" style="transform:rotate(' + rot + 'deg)"><div class="polaroid-img"><img src="' + src(p, true) + '" alt=""></div>' +
-        '<figcaption class="serif"><i>' + App.esc(m.place) + ', ' + m.monthYear + '</i></figcaption></figure></div>';
+      return '<div class="slide slide--polaroid"><img referrerpolicy="no-referrer" class="blurfill" src="' + src(p) + '" alt="">' +
+        '<figure class="polaroid polaroid--' + p.o + '" style="transform:rotate(' + rot + 'deg)"><div class="polaroid-img"><img referrerpolicy="no-referrer" src="' + src(p, true) + '" alt=""></div>' +
+        '<figcaption class="serif"><i>' + App.esc(m.place) + (m.monthYear ? ', ' + m.monthYear : '') + '</i></figcaption></figure></div>';
     }
   };
 
+  // opts.source: optional function returning the photo list (defaults to DATA.photos).
   App.Slideshow = function (el, opts) {
     this.el = el;
     this.o = Object.assign({ layout: 'auto', interval: 15000, captions: true }, opts || {});
@@ -74,9 +79,11 @@
   };
   var S = App.Slideshow.prototype;
 
+  S.photos = function () { var l = this.o.source && this.o.source(); return l && l.length ? l : D.photos; };
+
   S.refill = function () {
     var q = [];
-    D.photos.forEach(function (p) { q.push(p); if (p.fav) q.push(p); });
+    this.photos().forEach(function (p) { q.push(p); if (p.fav) q.push(p); });
     // On-this-day photos always come first in a fresh cycle
     shuffle(q).sort(function (a, b) { return (App.photoMeta(b).onThisDay ? 1 : 0) - (App.photoMeta(a).onThisDay ? 1 : 0); });
     this.queue = q;
@@ -90,23 +97,29 @@
     var layout = this.o.layout, n = this.count++;
     var first = this.take();
     if (!first) return null;
-    var self = this;
+    var self = this, all = this.photos();
     function sibling(pred) {
-      return self.take(pred) || D.photos.filter(function (x) { return x !== first && pred(x); })[0];
+      return self.take(pred) || all.filter(function (x) { return x !== first && pred(x); })[0];
     }
     if (layout === 'auto') {
-      if (first.o === 'p') layout = D.photos.some(function (x) { return x !== first && x.tag === first.tag; }) ? 'pair' : 'polaroid';
+      if (first.o === 'p') layout = all.some(function (x) { return x !== first && x.tag === first.tag; }) ? 'pair' : 'polaroid';
       else layout = n % 5 === 3 ? 'collage' : n % 5 === 4 ? 'polaroid' : 'cover';
     }
     var ps = [first];
     if (layout === 'pair') {
-      if (first.o !== 'p') { first = sibling(function (x) { return x.o === 'p'; }); ps = [first]; }
+      if (first.o !== 'p') {
+        var tall = sibling(function (x) { return x.o === 'p'; });
+        if (!tall) return { layout: 'cover', photos: ps };
+        first = tall; ps = [first];
+      }
       ps.push(sibling(function (x) { return x !== first && x.o === 'p' && x.tag === first.tag; }) || sibling(function (x) { return x !== first && x.o === 'p'; }));
     }
     if (layout === 'collage') {
       ps.push(sibling(function (x) { return x !== first; }));
       ps.push(sibling(function (x) { return ps.indexOf(x) < 0; }));
     }
+    // An album may not have enough (portrait) photos for pair or collage: show the first one alone.
+    if (ps.some(function (x) { return !x; })) return { layout: 'cover', photos: [ps[0] || all[0]] };
     return { layout: layout, photos: ps };
   };
 
@@ -149,6 +162,9 @@
     this.restart();
   };
   S.setLayout = function (l) { this.o.layout = l; this.next(); };
+  // The source list changed (e.g. a new album): drop the queue and history and show the new photos.
+  // A stopped slideshow shows the new photos when it next starts.
+  S.reload = function () { this.queue = []; this.history = []; this.current = null; if (this.timer) this.next(); };
   S.restart = function () {
     var self = this;
     clearInterval(this.timer);

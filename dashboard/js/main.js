@@ -6,6 +6,7 @@ import './app.js';
 import './weather.js';
 import './system.js';
 import './slideshow.js';
+import './photo-album.js';
 import './home-layouts.js';
 import './layouts/glass-config.js';
 import './views/home.js';
