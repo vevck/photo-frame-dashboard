@@ -17,11 +17,14 @@
     return '<div class="h-wx-top">' +
       '<span class="h-wx-icon">' + App.icon(w.cond, 60) + '</span>' +
       '<span class="h-wx-temp num">' + w.temp + '°</span>' +
-      '<span class="h-wx-meta"><b>' + w.label + '</b><span>H ' + w.hi + '°  L ' + w.lo + '°</span></span>' +
+      '<span class="h-wx-meta"><span class="h-wx-cond"><b>' + w.label + '</b>' + (w.place ? '<span class="h-wx-place">' + App.esc(App.wxText('display.place', { place: w.place })) + '</span>' : '') + '</span><span>' + App.wxText('display.highLow', { hi: w.hi, lo: w.lo }) + (w.stale ? App.wxText('display.hoursOld', { n: Math.round(w.ageMin / 60) }) : '') + '</span>' +
+        (w.sunrise && w.sunset ? '<span class="h-wx-sun">' + App.wxText('display.sunriseSunset', { sunrise: App.fmt.time(w.sunrise), sunset: App.fmt.time(w.sunset) }) + '</span>' : '') + '</span>' +
       '</div>' +
       '<div class="h-wx-say"><b>' + w.summary + '.</b> ' + w.advice + '.</div>' +
       '<div class="h-wx-hours">' + hours.map(function (h) {
-        var lift = tmax === tmin ? 0 : Math.round((h.t - tmin) / (tmax - tmin) * 8);
+        // Optional temperature curve (WEATHER_CONFIG.settings.hourlyCurvePx); 0 keeps every icon on one line.
+        var curve = WEATHER_CONFIG.settings.hourlyCurvePx || 0;
+        var lift = !curve || tmax === tmin ? 0 : Math.round((h.t - tmin) / (tmax - tmin) * curve);
         return '<div class="h-hr' + (h.p >= 50 ? ' is-wet' : '') + '"><span class="h-hr-l">' + h.label + '</span>' +
           '<span class="h-hr-i" style="transform:translateY(' + -lift + 'px)">' + App.icon(h.c, 22) + '</span><b>' + h.t + '°</b></div>';
       }).join('') + '</div>';
@@ -144,11 +147,23 @@
 
   function photoCaption(s) {
     var m = App.photoMeta(s.photos[0]);
-    V.el.querySelector('.h-photo-cap').innerHTML = '<b>' + (m.onThisDay ? 'On this day · ' : '') + m.kicker + '</b><span>' + App.esc(m.place) + '</span>';
+    V.el.querySelector('.h-photo-cap').innerHTML = (m.kicker ? '<b>' + (m.onThisDay ? 'On this day · ' : '') + m.kicker + '</b>' : '') + '<span>' + App.esc(m.place) + '</span>';
   }
 
+  // A different album was chosen in Photo settings: the photo tile switches to it (Classic layout only).
+  App.on('photoAlbum', function () { if (V.slides) V.slides.reload(); });
+
   App.register('home', {
-    show: function (el) {
+    // Another Today layout (home-layouts.js) can replace this screen; it may hide the rail (full-bleed).
+    fullbleed: function () { var L = App.activeHomeLayout(); return !!(L && L.fullbleed); },
+    show: function (el, opts) {
+      var L = App.activeHomeLayout(), name = App.homeLayout();
+      if (el.dataset.layout !== name) {            // layout changed: start from an empty view
+        if (V.slides) V.slides.stop();
+        if (el.dataset.layout && App.homeLayouts[el.dataset.layout] && App.homeLayouts[el.dataset.layout].hide) App.homeLayouts[el.dataset.layout].hide();
+        el.innerHTML = ''; V.slides = null; V.el = null; el.dataset.layout = name;
+      }
+      if (L) { L.show(el, opts || {}); return; }
       V.el = el;
       if (!el.firstChild) {
         el.innerHTML = '<div class="home">' +
@@ -167,20 +182,30 @@
           var g = e.target.closest('[data-go]');
           if (g) App.go(g.dataset.go);
         });
-        V.slides = new App.Slideshow(el.querySelector('.h-photo-stage'), { layout: 'cover', captions: false, interval: 12000, onChange: photoCaption });
+        // Same photos as the Photos tab: the album chosen in Photo settings, or the demo photos.
+        V.slides = new App.Slideshow(el.querySelector('.h-photo-stage'), {
+          layout: 'cover', captions: false, interval: 12000, onChange: photoCaption,
+          source: function () { return App.photoAlbum().photos; }
+        });
       }
       paint();
       V.slides.start();
     },
-    resume: function () { V.slides.start(); },
-    hide: function () { if (V.slides) V.slides.stop(); }
+    resume: function () { var L = App.activeHomeLayout(); if (L) { if (L.resume) L.resume(); return; } if (V.slides) V.slides.start(); },
+    hide: function () { var L = App.activeHomeLayout(); if (L) { if (L.hide) L.hide(); return; } if (V.slides) V.slides.stop(); }
   });
   // Every minute: just the clock and next-up countdown (cheap, even while hidden). Weather on the hour.
   App.on('minute', function (n) {
+    var L = App.activeHomeLayout();
+    if (L) { if (L.minute) L.minute(n); return; }
     if (!V.el || !V.el.firstChild) return;
     V.el.querySelector('.h-clock').innerHTML = clock();
     V.el.querySelector('.h-hero-slot').innerHTML = hero();
     if (n.getMinutes() === 0) { V.el.querySelector('.h-weather').innerHTML = weather(); V.el.querySelector('.h-lanes').innerHTML = lanes(); }
   });
-  App.on('data', function () { if (App.current === 'home') paint(); });
+  App.on('data', function () {
+    if (App.current !== 'home') return;
+    var L = App.activeHomeLayout();
+    if (L) { if (L.data) L.data(); } else if (V.el) paint();
+  });
 })();

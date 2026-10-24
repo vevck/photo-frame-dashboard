@@ -1,4 +1,4 @@
-// Ambient (idle photo frame) and Night (dim red clock) overlays.
+// Ambient (idle photo frame, showing the album chosen in Photo settings) and Night (dim red clock) overlays.
 (function () {
   'use strict';
   var D = window.DATA, $ = App.$;
@@ -9,7 +9,9 @@
     return '<div class="amb-clock"><div class="amb-time num">' + App.fmt.time(n, false) + '</div>' +
       '<div class="amb-date">' + App.fmt.day(n) + ', ' + App.fmt.month(n) + ' ' + n.getDate() + '</div></div>' +
       '<div class="amb-right">' +
-      '<div class="amb-wx">' + App.icon(w.cond, 44) + '<span class="num">' + w.temp + '°</span><small>' + w.summary + '</small></div>' +
+      '<div class="amb-wx">' + App.icon(w.cond, 44) + '<span class="num">' + w.temp + '°</span>' +
+      '<div class="amb-wx-text">' + (w.place ? '<b class="amb-place">' + App.esc(App.wxText('display.ambientPlace', { place: w.place })) + '</b>' : '') +
+      '<small>' + w.summary + '</small></div></div>' +
       (next ? '<div class="amb-next" style="' + App.pstyle(App.evColor(next)) + '"><i></i>' + App.esc(next.title) + ' · ' + App.fmt.time(next.start) + '</div>' : '') +
       '<div class="amb-who">' + D.people.map(function (p) { return App.avatar(p, 34, p.home ? '' : 'avatar--away'); }).join('') + '</div>' +
       '</div>';
@@ -36,7 +38,12 @@
   App.on('ready', function () {
     $('#ambient').innerHTML = '<div class="amb-stage"></div><div class="amb-scrim"></div><div class="amb-info"></div>';
     $('#night').innerHTML = '<div class="nt-inner"></div>';
-    amb.show = new App.Slideshow($('#ambient .amb-stage'), { layout: 'cover', captions: false, interval: 14000 });
+    // Same photos as the Photos tab: the album chosen in Photo settings, or the demo photos.
+    amb.show = new App.Slideshow($('#ambient .amb-stage'), {
+      layout: 'cover', captions: false, interval: 14000,
+      source: function () { return App.photoAlbum().photos; }
+    });
+    App.on('photoAlbum', function () { amb.show.reload(); });
     $('#ambient').addEventListener('click', function () { App.setMode('day'); App.go('home'); });
     $('#night').addEventListener('click', function () { App.setMode('nightdash'); });
   });

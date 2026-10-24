@@ -72,7 +72,7 @@
   function hoursCol() {
     var h = '';
     for (var i = START; i <= END; i++) {
-      h += '<div class="hr" style="top:' + (i - START) * PX + 'px"><span>' + (i === 12 ? 'Noon' : (i % 12 || 12) + (i < 12 ? ' AM' : ' PM')) + '</span></div>';
+      h += '<div class="hr" style="top:' + (i - START) * PX + 'px"><span>' + (i === 12 && !App.clock24 ? 'Noon' : App.fmt.hourLabel(i, true)) + '</span></div>';
     }
     return h;
   }
@@ -285,7 +285,10 @@
     var now = App.now();
     var st = { who: [], day: 0, time: '15:30', dur: 60, title: '' };
     var days = [0, 1, 2, 3, 4];
-    var times = [['08:00', '8 AM'], ['12:00', 'Noon'], ['15:30', '3:30 PM'], ['16:30', '4:30 PM'], ['18:00', '6 PM'], ['19:30', '7:30 PM']];
+    var times = ['08:00', '12:00', '15:30', '16:30', '18:00', '19:30'].map(function (t) {
+      var p = t.split(':');
+      return [t, t === '12:00' && !App.clock24 ? 'Noon' : App.fmt.hour(new Date(2000, 0, 1, +p[0], +p[1]))];
+    });
     var ideas = ['Soccer', 'Playdate', 'Dentist', 'Dinner out', 'Swim', 'Birthday party'];
     App.sheet(
       '<div class="sheet-pad add">' +

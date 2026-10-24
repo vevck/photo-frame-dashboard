@@ -114,23 +114,84 @@
     });
   };
 
-  // ------------------------------------------------------------ demo drawer
+  // ------------------------------------------------------------ HomeDash controls (press and hold the clock)
+  // The Alerts and Calendar data sections are kept for testing but hidden; set this to true to show them.
+  var SHOW_TEST_SECTIONS = false;
   function demoHTML() {
     var t = App.now();
     return '<div class="demo-panel">' +
-      '<div class="demo-head"><div><div class="label label--light">Prototype</div><h2 class="serif">Demo controls</h2></div><button class="demo-x" data-demo-close>' + App.icon('x', 28) + '</button></div>' +
-      '<div class="demo-sec"><div class="label label--light">Time of day · now ' + App.fmt.time(t) + '</div><div class="demo-grid">' +
-      '<button data-time="7:10">7:10 AM</button><button data-time="15:18">3:18 PM</button><button data-time="19:45">7:45 PM</button><button data-time="23:40">11:40 PM</button><button data-time="real">Real time</button></div></div>' +
+      '<div class="demo-head"><h2 class="serif">HomeDash Controls</h2><button class="demo-x" data-demo-close>' + App.icon('x', 28) + '</button></div>' +
+      '<div class="demo-sec"><div class="label label--light">Clock format</div><div class="demo-grid">' +
+      '<button data-clock="12" class="' + (App.clock24 ? '' : 'is-on') + '">12-hour · ' + (t.getHours() % 12 || 12) + ':' + (t.getMinutes() < 10 ? '0' : '') + t.getMinutes() + (t.getHours() >= 12 ? ' PM' : ' AM') + '</button>' +
+      '<button data-clock="24" class="' + (App.clock24 ? 'is-on' : '') + '">24-hour · ' + (t.getHours() < 10 ? '0' : '') + t.getHours() + ':' + (t.getMinutes() < 10 ? '0' : '') + t.getMinutes() + '</button></div></div>' +
+      '<div class="demo-sec"><div class="label label--light">Layout</div><div class="demo-grid">' +
+      App.homeLayoutList().map(function (l) {
+        return '<button data-layout="' + l.name + '" class="' + (App.homeLayout() === l.name ? 'is-on' : '') + '">' + App.esc(l.label) + '</button>';
+      }).join('') + '</div></div>' +
+      locationHTML() +
       '<div class="demo-sec"><div class="label label--light">Modes</div><div class="demo-grid">' +
-      '<button data-mode="ambient">Ambient</button><button data-mode="night">Night</button><button data-fastidle>' + (App.idle.home < 60 ? 'Idle: fast ✓' : 'Idle: fast') + '</button></div></div>' +
-      '<div class="demo-sec"><div class="label label--light">Alerts</div><div class="demo-grid">' +
+      '<button data-mode="ambient">Ambient</button><button data-mode="night">Night</button></div></div>' +
+      (SHOW_TEST_SECTIONS ? testSectionsHTML() : '') +
+      '<p class="demo-note">Keyboard: <b>D</b> controls · <b>A</b> ambient · <b>N</b> night · <b>1–7</b> views</p>' +
+      '</div>';
+  }
+  // ------------------------------------------------------------ weather location (city search)
+  // State survives the panel being re-rendered. Text comes from WEATHER_CONFIG.location.
+  var LOC = { query: '', results: null, status: '', error: false, busy: false, seq: 0 };
+  function lt(key, vals) { return App.wxText('location.' + key, vals); }
+  function locationHTML() {
+    var cur = App.weatherPlace(), def = App.weatherDefaultPlace();
+    var isDefault = Math.abs(cur.lat - def.lat) < 1e-4 && Math.abs(cur.lon - def.lon) < 1e-4;
+    return '<div class="demo-sec loc"><div class="label label--light">' + App.esc(lt('title')) + '</div>' +
+      '<div class="loc-now">' + App.esc(lt('showing', { place: App.placeLabel(cur) })) + '</div>' +
+      '<form class="loc-form" data-loc-form>' +
+      '<input class="loc-input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" data-loc-input' +
+      ' placeholder="' + App.esc(lt('placeholder')) + '" value="' + App.esc(LOC.query) + '"' + (LOC.busy ? ' disabled' : '') + '>' +
+      '<button type="submit" class="loc-go"' + (LOC.busy ? ' disabled' : '') + '>' + App.esc(lt('search')) + '</button></form>' +
+      (LOC.status ? '<p class="loc-status' + (LOC.error ? ' is-error' : '') + '">' + App.esc(LOC.status) + '</p>' : '') +
+      (LOC.results && LOC.results.length ? '<div class="loc-results">' + LOC.results.map(function (r, i) {
+        return '<button data-loc-pick="' + i + '"' + (LOC.busy ? ' disabled' : '') + '><b>' + App.esc(r.name) + '</b><span>' +
+          App.esc([r.region, r.country].filter(Boolean).join(', ')) + '</span></button>';
+      }).join('') + '</div>' : '') +
+      (isDefault ? '' : '<button class="loc-reset" data-loc-reset' + (LOC.busy ? ' disabled' : '') + '>' + App.esc(lt('reset', { place: def.name })) + '</button>') +
+      '</div>';
+  }
+  function locRefresh() { if ($('#demo').classList.contains('is-open')) App.openDemo(); }
+  function locSearch() {
+    var q = LOC.query.trim();
+    if (!q || LOC.busy) return;
+    var my = ++LOC.seq;
+    LOC.busy = true; LOC.results = null; LOC.status = lt('searching'); LOC.error = false; locRefresh();
+    App.searchPlaces(q).then(function (list) {
+      if (my !== LOC.seq) return;
+      LOC.results = list;
+      LOC.status = list.length ? lt('pickOne') : lt('noResults', { query: q });
+      LOC.error = !list.length;
+    }, function () {
+      if (my !== LOC.seq) return;
+      LOC.status = lt('searchFailed'); LOC.error = true;
+    }).then(function () { if (my === LOC.seq) { LOC.busy = false; locRefresh(); } });
+  }
+  function locUse(place) {
+    var my = ++LOC.seq, current = App.placeLabel(App.weatherPlace()), label = App.placeLabel(place);
+    LOC.busy = true; LOC.status = lt('loading', { place: label }); LOC.error = false; locRefresh();
+    App.setWeatherPlace(place).then(function () {
+      if (my !== LOC.seq) return;
+      LOC.results = null; LOC.query = ''; LOC.status = lt('switched', { place: label }); LOC.error = false;
+      App.toast(App.esc(lt('switched', { place: place.name })), { ms: 3000 });
+    }, function () {
+      if (my !== LOC.seq) return;
+      LOC.status = lt('switchFailed', { place: label, current: current }); LOC.error = true;
+    }).then(function () { if (my === LOC.seq) { LOC.busy = false; locRefresh(); } });
+  }
+
+  function testSectionsHTML() {
+    return '<div class="demo-sec"><div class="label label--light">Alerts</div><div class="demo-grid">' +
       '<button data-alert="doorbell">Doorbell</button><button data-alert="leak">Water leak</button><button data-alert="garage">Garage open</button><button data-alert="package">Package</button></div></div>' +
       '<div class="demo-sec"><div class="label label--light">Calendar data</div><div class="demo-grid">' +
       ['normal', 'empty', 'busy'].map(function (m) {
         return '<button data-cal="' + m + '" class="' + (App.calMode === m ? 'is-on' : '') + '">' + { normal: 'Normal day', empty: 'Empty day', busy: 'Overloaded' }[m] + '</button>';
-      }).join('') + '</div></div>' +
-      '<p class="demo-note">Keyboard: <b>D</b> demo · <b>A</b> ambient · <b>N</b> night · <b>1–7</b> views</p>' +
-      '</div>';
+      }).join('') + '</div></div>';
   }
   App.openDemo = function () {
     var el = $('#demo');
@@ -143,20 +204,22 @@
     var b = e.target.closest('button');
     if (!b) { if (e.target === $('#demo')) closeDemo(); return; }
     if (b.hasAttribute('data-demo-close')) return closeDemo();
-    if (b.dataset.time) {
-      if (b.dataset.time === 'real') App.setTime(null);
-      else { var p = b.dataset.time.split(':'); App.setTime(+p[0], +p[1]); }
+    if (b.dataset.clock) {
+      App.setClock24(b.dataset.clock === '24');
       App.openDemo();
+      App.toast('Clock set to <b>' + b.dataset.clock + '-hour</b>', { ms: 2500 });
       return;
     }
+    if (b.dataset.layout) {
+      var lay = App.homeLayoutList().filter(function (l) { return l.name === b.dataset.layout; })[0];
+      App.setHomeLayout(b.dataset.layout);   // saved on this device; rebuilds Today if it's showing
+      App.openDemo();
+      if (lay) App.toast('Layout set to <b>' + App.esc(lay.label) + '</b>', { ms: 2500 });
+      return;
+    }
+    if (b.dataset.locPick != null) { if (LOC.results && LOC.results[+b.dataset.locPick]) locUse(LOC.results[+b.dataset.locPick]); return; }
+    if (b.hasAttribute('data-loc-reset')) { LOC.results = null; locUse(App.weatherDefaultPlace()); return; }
     if (b.dataset.mode) { closeDemo(); App.setMode(b.dataset.mode); return; }
-    if (b.hasAttribute('data-fastidle')) {
-      var fast = App.idle.home >= 60;
-      App.idle.home = fast ? 8 : 60;
-      App.idle.ambient = fast ? 15 : 120;
-      App.openDemo();
-      return;
-    }
     if (b.dataset.alert) {
       closeDemo();
       ({ doorbell: App.doorbell, leak: App.leak, garage: App.garageOpenAlert, package: App.packageNotice })[b.dataset.alert]();
@@ -167,10 +230,21 @@
 
   App.on('ready', function () {
     $('#demo').addEventListener('click', demoClick);
+    $('#demo').addEventListener('submit', function (e) {
+      if (!e.target.hasAttribute('data-loc-form')) return;
+      e.preventDefault();
+      var input = e.target.querySelector('[data-loc-input]');
+      if (input) { LOC.query = input.value; input.blur(); }
+      locSearch();
+    });
+    $('#demo').addEventListener('input', function (e) { if (e.target.hasAttribute('data-loc-input')) LOC.query = e.target.value; });
     App.hold($('#railClock'), 700, { done: App.openDemo });
     document.addEventListener('keydown', function (e) {
-      if (e.target.tagName === 'INPUT') return;
-      var k = e.key.toLowerCase();
+      // Never treat typing as shortcuts: skip form fields, and while HomeDash Controls is open (it has the
+      // city box) allow only Escape. On the frame, typing "Chennai" otherwise switched to Ambient mode.
+      if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+      var k = (e.key || '').toLowerCase();
+      if ($('#demo').classList.contains('is-open') && k !== 'escape') return;
       if (k === 'd') { $('#demo').classList.contains('is-open') ? closeDemo() : App.openDemo(); }
       if (k === 'a') App.setMode('ambient');
       if (k === 'n') App.setMode('night');
